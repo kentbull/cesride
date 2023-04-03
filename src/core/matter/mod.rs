@@ -36,7 +36,7 @@ pub trait Matter: Default {
         } else if let Some(qb2) = qb2 {
             Self::new_with_qb2(qb2)
         } else {
-            err!(Error::Validation("must specify raw and code, qb64b, qb64 or qb2".to_string()))
+            err!(Error::EmptyMaterial("must specify raw and code, qb64b, qb64 or qb2".to_string()))
         }
     }
 

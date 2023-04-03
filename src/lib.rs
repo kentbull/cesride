@@ -32,3 +32,13 @@ pub use crate::{
     error::Error,
     error::Result,
 };
+
+use pyo3::prelude::*;
+
+
+
+#[pymodule]
+fn cesride(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
+    m.add_class::<Diger>()?;
+    Ok(())
+}

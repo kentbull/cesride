@@ -1,6 +1,9 @@
 use crate::core::matter::{tables as matter, Matter};
 use crate::crypto::hash;
 use crate::error::{err, Error, Result};
+use pyo3::prelude::*;
+use pyo3::exceptions::*;
+
 
 /// ```rust
 /// use cesride::{matter, Matter, Diger};
@@ -22,6 +25,7 @@ use crate::error::{err, Error, Result};
 ///
 /// example().unwrap();
 /// ```
+#[pyclass]
 #[derive(Debug, Clone, PartialEq)]
 pub struct Diger {
     raw: Vec<u8>,
@@ -64,7 +68,8 @@ impl Diger {
         qb64: Option<&str>,
         qb2: Option<&[u8]>,
     ) -> Result<Self> {
-        let result = Matter::new(code, raw, qb64b, qb64, qb2);
+        let code_str = code.unwrap_or(matter::Codex::Blake3_256);
+        let result = Matter::new(Some(code_str), raw, qb64b, qb64, qb2);
         if result.is_ok() {
             let diger: Self = result?;
             validate_code(&diger.code())?;
@@ -75,7 +80,11 @@ impl Diger {
             let dig = hash::digest(code, ser)?;
             Matter::new(Some(code), Some(&dig), None, None, None)
         } else {
-            err!(Error::Validation("failure creating diger".to_string()))
+
+            let mut err_prefix = "failure creating Diger: ".to_string().to_owned();
+            let errstr = result.err().unwrap().to_string().to_owned();
+            err_prefix.push_str(&errstr);
+            err!(Error::Validation(err_prefix))
         }
     }
 
@@ -150,6 +159,43 @@ impl Diger {
     }
 }
 
+#[pymethods]
+impl Diger {
+    #[new]
+    #[pyo3(signature = (ser=None,code=None,raw=None,qb64b=None,qb64=None,qb2=None))]
+    fn py_new(ser: Option<&[u8]>,
+              code: Option<&str>,
+              raw: Option<&[u8]>,
+              qb64b: Option<&[u8]>,
+              qb64: Option<&str>,
+              qb2: Option<&[u8]>,
+    ) -> PyResult<Self> {
+        match Self::new(ser, code, raw, qb64b, qb64, qb2) {
+            Ok(val) => Ok(val),
+            Err(val) => Err(PyValueError::new_err(val.to_string()))
+        }
+    }
+
+    #[pyo3(name = "qb64")]
+    fn py_qb64(&self) -> PyResult<String> {
+        match self.qb64() {
+            Ok(s) => Ok(s),
+            Err(e) => Err(PyException::new_err(e.to_string())),
+        }
+    }
+
+    #[pyo3(name = "raw")]
+    fn py_raw(&self) -> Vec<u8> {
+        self.raw()
+    }
+
+    #[getter(code)]
+    fn py_code(&self) -> String {
+        self.code()
+    }
+
+}
+
 impl Matter for Diger {
     fn code(&self) -> String {
         self.code.clone()
@@ -178,11 +224,13 @@ impl Matter for Diger {
 
 #[cfg(test)]
 mod test {
+    use anyhow::__private::kind::TraitKind;
     use crate::core::diger::Diger;
     use crate::core::matter::{tables as matter, Matter};
     use crate::crypto::hash;
     use hex_literal::hex;
     use rstest::rstest;
+    use crate::Error;
 
     #[test]
     fn convenience() {
@@ -195,6 +243,20 @@ mod test {
         assert!(Diger::new_with_qb64b(&diger.qb64b().unwrap()).is_ok());
         assert!(Diger::new_with_qb64(&diger.qb64().unwrap()).is_ok());
         assert!(Diger::new_with_qb2(&diger.qb2().unwrap()).is_ok());
+    }
+
+    #[test]
+    fn empty_returns_empty_material() {
+        let diger = Diger::new(None, None, None, None, None, None);
+        assert!(diger.is_err());
+        let err = diger.unwrap_err();
+        let newref = err.downcast_ref::<Error>();
+        match newref {
+            Some(Error::EmptyMaterial(_)) => assert!(true),
+            Some(_) => assert!(false),
+            None => assert!(false)
+        }
+        assert!(false);
     }
 
     #[rstest]
